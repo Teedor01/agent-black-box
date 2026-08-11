@@ -1,0 +1,15 @@
+-- Seed the sources table with the demo corpus's known sources before the
+-- first research session runs. Fill in real URLs/domains for Crynux and
+-- Neptune Privacy sources during Day 2 (demo corpus curation) — this file
+-- is intentionally a skeleton, not populated, since the actual demo
+-- narrative (which source is "the one that goes stale") isn't decided yet.
+--
+-- Convention: reliability_score starts at 0.5 (neutral) for every source.
+-- The demo's whole point is watching this number move as a *consequence*
+-- of real episodes, not seeding it pre-biased.
+
+-- INSERT INTO sources (url, domain, source_type, project) VALUES
+--   ('https://...', '...', 'official_docs', 'crynux'),
+--   ('https://...', '...', 'blog', 'crynux'),
+--   ('https://...', '...', 'official_docs', 'neptune_privacy'),
+--   ('https://...', '...', 'blog', 'neptune_privacy');
