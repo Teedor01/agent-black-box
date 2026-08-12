@@ -85,6 +85,7 @@ def test_full_loop_runs_in_order_and_persists():
          patch("src.agent.extractor.embed_text", fake_embed_text), \
          patch("src.agent.orchestrator.retrieve_memory", fake_retrieve_memory), \
          patch("src.agent.orchestrator.fetch_source", fake_fetch_source), \
+         patch("src.agent.orchestrator.detect_contradictions", lambda *a, **k: []), \
          patch("src.agent.orchestrator.run_in_transaction", fake_run_in_transaction):
 
         config = fake_config()
@@ -150,6 +151,7 @@ def test_fetch_failure_does_not_crash_episode_and_scores_source_down():
          patch("src.agent.learner.embed_text", fake_embed_text), \
          patch("src.agent.orchestrator.retrieve_memory", fake_retrieve_memory), \
          patch("src.agent.orchestrator.fetch_source", fake_fetch_source), \
+         patch("src.agent.orchestrator.detect_contradictions", lambda *a, **k: []), \
          patch("src.agent.orchestrator.run_in_transaction", fake_run_in_transaction):
 
         config = fake_config()
@@ -166,7 +168,106 @@ def test_fetch_failure_does_not_crash_episode_and_scores_source_down():
     print("OK: fetch failure handled gracefully, source scored down, lesson recorded, episode still completes")
 
 
+def test_contradiction_supersedes_old_claim_and_dings_old_source():
+    """The money shot, tested at the unit level: a new claim that
+    contradicts a prior one produces a lesson about the OLD source,
+    dings that source's reliability, and records the supersession --
+    all in the same episode's persist call. This is what makes a LATER
+    episode's plan() stage deprioritize the old source."""
+    from src.agent.contradiction import ContradictionResult
+    from src.agent.config import ExtractedClaim
+    from src.agent import orchestrator
+
+    OLD_SOURCE = SourceRecord(
+        source_id="22222222-2222-2222-2222-222222222222",
+        url="https://docs.crynux.io/system-design/network-architecture",
+        domain="docs.crynux.io", source_type="official_docs", project="crynux",
+        reliability_score=0.5, times_used=1, successful_uses=1, problematic_uses=0,
+    )
+    NEW_SOURCE = SourceRecord(
+        source_id="33333333-3333-3333-3333-333333333333",
+        url="https://docs.crynux.io/", domain="docs.crynux.io", source_type="official_docs",
+        project="crynux", reliability_score=0.5, times_used=0, successful_uses=0, problematic_uses=0,
+    )
+
+    plan_json = json.dumps({
+        "strategy_summary": "Consult current docs.",
+        "planned_sources": [{"source_id": NEW_SOURCE.source_id, "priority": 1, "rationale": "Most recent."}],
+    })
+    claims_json = json.dumps({
+        "claims": [{"text": "Crynux nodes now support LLM/VLM inference and fine-tuning, not just image generation.", "confidence": 0.9}]
+    })
+
+    def fake_generate_text(config, system_prompt, user_prompt, max_tokens=1024):
+        if "planning stage" in system_prompt.lower():
+            return plan_json
+        if "compare two factual claims" in system_prompt.lower():
+            return json.dumps({"conflict": True, "note": "New claim broadens scope beyond the old claim's image-generation-only framing."})
+        if "lesson" in system_prompt.lower():
+            return json.dumps({"text": "docs.crynux.io/system-design/network-architecture understated node scope; verify architecture claims against the current docs homepage."})
+        if "extract" in system_prompt.lower() or "claims" in system_prompt.lower():
+            return claims_json
+        return "Crynux nodes now support LLM/VLM inference and fine-tuning."
+
+    def fake_embed_text(config, text):
+        return [0.1, 0.1, 0.1]
+
+    def fake_fetch_source(url, timeout_seconds=15):
+        return FetchResult(url=url, success=True, text="Crynux nodes now support LLM/VLM inference and fine-tuning.")
+
+    def fake_retrieve_memory(config, project, query):
+        from src.agent.config import RetrievedMemory
+        # Both sources are already known -- this is Session 2, not the project's first episode.
+        return RetrievedMemory(relevant_claims=[], relevant_lessons=[],
+                                source_reliability=[OLD_SOURCE, NEW_SOURCE])
+
+    fake_contradiction = ContradictionResult(
+        new_claim=ExtractedClaim(text=json.loads(claims_json)["claims"][0]["text"], confidence=0.9,
+                                  embedding=[0.1, 0.1, 0.1], source_id=NEW_SOURCE.source_id),
+        existing_claim_id="44444444-4444-4444-4444-444444444444",
+        existing_claim_text="Crynux nodes execute Stable Diffusion image generation tasks.",
+        existing_source_id=OLD_SOURCE.source_id,
+        note="New claim broadens scope beyond the old claim's image-generation-only framing.",
+    )
+
+    persist_calls = []
+
+    def fake_run_in_transaction(config, fn, *args, max_retries=3, **kwargs):
+        persist_calls.append({"args": args, "kwargs": kwargs})
+        return None
+
+    with patch("src.agent.planner.generate_text", fake_generate_text), \
+         patch("src.agent.extractor.generate_text", fake_generate_text), \
+         patch("src.agent.synthesizer.generate_text", fake_generate_text), \
+         patch("src.agent.learner.generate_text", fake_generate_text), \
+         patch("src.agent.extractor.embed_text", fake_embed_text), \
+         patch("src.agent.learner.embed_text", fake_embed_text), \
+         patch("src.agent.orchestrator.retrieve_memory", fake_retrieve_memory), \
+         patch("src.agent.orchestrator.fetch_source", fake_fetch_source), \
+         patch("src.agent.orchestrator.detect_contradictions", lambda *a, **k: [fake_contradiction]), \
+         patch("src.agent.orchestrator.run_in_transaction", fake_run_in_transaction):
+
+        config = fake_config()
+        result = orchestrator.run_episode(config, project="crynux", query="What is Crynux's current node architecture?")
+
+    kwargs = persist_calls[0]["kwargs"]
+
+    assert kwargs["supersedes"] == {fake_contradiction.new_claim.claim_id: fake_contradiction.existing_claim_id}
+    assert kwargs["contradictions"][0]["conflicting_claim_id"] == fake_contradiction.existing_claim_id
+
+    old_source_updates = [u for u in kwargs["reliability_updates"] if u["source_id"] == OLD_SOURCE.source_id]
+    assert len(old_source_updates) == 1, "the OLD source (not the new one) should get dinged"
+    assert old_source_updates[0]["problematic_delta"] == 1
+    assert old_source_updates[0]["new_score"] < OLD_SOURCE.reliability_score
+
+    lesson_sources = [l.source_id for l in result.lessons]
+    assert OLD_SOURCE.source_id in lesson_sources, "a lesson should be recorded against the OLD source"
+
+    print("OK: contradiction supersedes old claim, dings old source, records lesson -- ready for a later episode's plan() to act on")
+
+
 if __name__ == "__main__":
     test_full_loop_runs_in_order_and_persists()
     test_fetch_failure_does_not_crash_episode_and_scores_source_down()
+    test_contradiction_supersedes_old_claim_and_dings_old_source()
     print("\nAll dry-run checks passed.")

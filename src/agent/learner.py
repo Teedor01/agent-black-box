@@ -67,3 +67,23 @@ def maybe_generate_lesson(config: Config, source: SourceRecord, outcome_descript
     embedding = embed_text(config, text)
 
     return Lesson(text=text, confidence=0.7, embedding=embedding, source_id=source.source_id)
+
+
+def generate_contradiction_lesson(config: Config, old_source: SourceRecord, contradiction) -> Lesson:
+    """Always generates -- a contradiction is inherently notable, unlike
+    a routine fetch failure. `contradiction` is a
+    src.agent.contradiction.ContradictionResult, not type-hinted directly
+    to avoid a circular import between the two modules."""
+    user_prompt = (
+        f"Source: {old_source.domain} ({old_source.url})\n"
+        f'This source previously supported the claim: "{contradiction.existing_claim_text}"\n'
+        f'New research found: "{contradiction.new_claim.text}"\n'
+        f"Why they conflict: {contradiction.note}\n\n"
+        f"Write the lesson as JSON."
+    )
+    raw = generate_text(config, LESSON_SYSTEM_PROMPT, user_prompt, max_tokens=256)
+    parsed = json.loads(raw)
+    text = parsed["text"]
+    embedding = embed_text(config, text)
+
+    return Lesson(text=text, confidence=0.8, embedding=embedding, source_id=old_source.source_id)

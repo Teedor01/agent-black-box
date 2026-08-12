@@ -35,6 +35,30 @@ def get_sources_for_project(cur, project: str) -> list[SourceRecord]:
     ]
 
 
+def find_closest_claim(cur, project: str, embedding: list[float]) -> Optional[dict]:
+    """Used by contradiction detection (Day 5) -- unlike
+    retrieve_similar_claims, this also returns the actual distance so the
+    caller can decide whether the match is close enough to be worth an
+    LLM judgment call at all."""
+    cur.execute(
+        """
+        SELECT claim_id, text, confidence, source_id, embedding <-> %s AS distance
+        FROM claims
+        WHERE project = %s AND superseded_by IS NULL
+        ORDER BY embedding <-> %s
+        LIMIT 1
+        """,
+        (str(embedding), project, str(embedding)),
+    )
+    row = cur.fetchone()
+    if row is None:
+        return None
+    return {
+        "claim_id": str(row[0]), "text": row[1], "confidence": row[2],
+        "source_id": str(row[3]) if row[3] else None, "distance": float(row[4]),
+    }
+
+
 def retrieve_similar_claims(cur, project: str, query_embedding: list[float], limit: int = 5) -> list[dict]:
     """The structural-filter-then-vector-rank query from architecture doc
     Section F, using the (project, embedding) prefix-partitioned vector
@@ -113,9 +137,8 @@ def link_episode_source(cur, episode_id: str, source_id: str, role: str) -> None
     )
 
 
-def insert_claim(cur, episode_id: str, source_id: str, project: str, text: str,
-                  embedding: list[float], confidence: float) -> str:
-    claim_id = new_id()
+def insert_claim(cur, claim_id: str, episode_id: str, source_id: str, project: str, text: str,
+                  embedding: list[float], confidence: float) -> None:
     cur.execute(
         """
         INSERT INTO claims (claim_id, episode_id, source_id, project, text, embedding, confidence, created_at)
@@ -123,7 +146,6 @@ def insert_claim(cur, episode_id: str, source_id: str, project: str, text: str,
         """,
         (claim_id, episode_id, source_id, project, text, str(embedding), confidence, now()),
     )
-    return claim_id
 
 
 def mark_claim_superseded(cur, old_claim_id: str, new_claim_id: str) -> None:
@@ -176,27 +198,31 @@ def update_source_reliability(cur, source_id: str, new_score: float,
 
 
 def persist_episode(cur, result: EpisodeResult, source_roles: dict[str, str],
-                     supersedes: dict[str, str], reliability_updates: list[dict]) -> None:
+                     supersedes: dict[str, str], reliability_updates: list[dict],
+                     contradictions: list[dict] | None = None) -> None:
     """Single entry point the orchestrator calls inside run_in_transaction.
     source_roles: {source_id: 'used'|'rejected'|'deprioritized'}
-    supersedes: {new_claim_id: old_claim_id} for any contradictions resolved this episode
+    supersedes: {new_claim_id: old_claim_id} -- new claim's ID is already
+        assigned client-side (ExtractedClaim.claim_id) before this runs,
+        which is what lets contradiction detection reference it ahead of
+        the write.
     reliability_updates: [{'source_id', 'new_score', 'times_used_delta', 'successful_delta', 'problematic_delta'}]
+    contradictions: [{'claim_id', 'conflicting_claim_id', 'note'}]
     """
     insert_episode(cur, result.episode_id, result.project, result.query, result.strategy_summary)
 
     for source_id, role in source_roles.items():
         link_episode_source(cur, result.episode_id, source_id, role)
 
-    claim_ids_by_text = {}
     for claim in result.claims:
-        claim_id = insert_claim(
-            cur, result.episode_id, claim.source_id, result.project,
-            claim.text, claim.embedding, claim.confidence,
-        )
-        claim_ids_by_text[claim.text] = claim_id
+        insert_claim(cur, claim.claim_id, result.episode_id, claim.source_id, result.project,
+                      claim.text, claim.embedding, claim.confidence)
 
     for new_claim_id, old_claim_id in supersedes.items():
         mark_claim_superseded(cur, old_claim_id, new_claim_id)
+
+    for c in (contradictions or []):
+        insert_contradiction(cur, c["claim_id"], c["conflicting_claim_id"], c["note"])
 
     for lesson in result.lessons:
         insert_lesson(cur, result.episode_id, lesson.source_id, result.project,

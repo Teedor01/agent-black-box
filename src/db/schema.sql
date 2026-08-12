@@ -16,8 +16,8 @@ CREATE TABLE sources (
   source_id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   url               STRING,
   domain            STRING NOT NULL,
-  source_type       STRING,                  
-  project           STRING NOT NULL,         
+  source_type       STRING,                  -- official_docs | blog | social | third_party
+  project           STRING NOT NULL,         -- 'crynux' | 'neptune_privacy' | ...
   reliability_score FLOAT DEFAULT 0.5,
   times_used        INT DEFAULT 0,
   successful_uses   INT DEFAULT 0,
@@ -29,11 +29,11 @@ CREATE TABLE sources (
 );
 
 CREATE TABLE episodes (
-  episode_id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),  
+  episode_id    UUID PRIMARY KEY DEFAULT gen_random_uuid(),  -- client-generated for idempotent retries
   project       STRING NOT NULL,
   query         STRING NOT NULL,
   strategy      STRING,
-  status        STRING DEFAULT 'in_progress',  
+  status        STRING DEFAULT 'in_progress',  -- in_progress | completed | failed | pending_persist
   started_at    TIMESTAMPTZ DEFAULT now(),
   completed_at  TIMESTAMPTZ,
   final_answer  STRING,
@@ -49,7 +49,10 @@ CREATE TABLE episode_sources (
   PRIMARY KEY (episode_id, source_id)
 );
 
-
+-- Embedding dimension: set to match the exact Bedrock embedding model
+-- chosen on Day 1 (e.g. Titan Text Embeddings V2 defaults to 1024 but
+-- supports 256/512/1024 — pick one and set it here before any rows are
+-- written; changing it later means a migration, not a config edit).
 CREATE TABLE claims (
   claim_id       UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   episode_id     UUID REFERENCES episodes(episode_id),
@@ -58,7 +61,7 @@ CREATE TABLE claims (
   text           STRING NOT NULL,
   embedding      VECTOR(1024),
   confidence     FLOAT,
-  superseded_by  UUID REFERENCES claims(claim_id),  
+  superseded_by  UUID REFERENCES claims(claim_id),  -- append-only: never overwrite, point forward instead
   created_at     TIMESTAMPTZ DEFAULT now(),
 
   VECTOR INDEX (project, embedding)
@@ -67,7 +70,7 @@ CREATE TABLE claims (
 CREATE TABLE lessons (
   lesson_id   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   episode_id  UUID REFERENCES episodes(episode_id),
-  source_id   UUID REFERENCES sources(source_id),  
+  source_id   UUID REFERENCES sources(source_id),  -- nullable: strategy lessons aren't source-specific
   project     STRING NOT NULL,
   text        STRING NOT NULL,
   embedding   VECTOR(1024),
@@ -86,4 +89,16 @@ CREATE TABLE contradictions (
   resolution_note      STRING
 );
 
-
+-- Example retrieval query this schema is built for (Section F of the
+-- architecture doc) — structural filter first, vector rank second, one
+-- round trip:
+--
+-- SELECT claim_id, text, confidence
+-- FROM claims
+-- WHERE project = $1
+-- ORDER BY embedding <-> $2
+-- LIMIT 5;
+--
+-- Because (project, embedding) is the index's prefix + vector column, this
+-- query only searches the given project's partition of the index, not the
+-- whole table.

@@ -17,8 +17,9 @@ import argparse
 import logging
 
 from src.agent.config import Config, EpisodeResult, new_id
+from src.agent.contradiction import detect_contradictions
 from src.agent.extractor import extract_claims
-from src.agent.learner import compute_reliability_update, maybe_generate_lesson
+from src.agent.learner import compute_reliability_update, generate_contradiction_lesson, maybe_generate_lesson
 from src.agent.memory import retrieve_memory
 from src.agent.planner import plan_research
 from src.agent.synthesizer import synthesize_answer
@@ -91,9 +92,36 @@ def run_episode(config: Config, project: str, query: str, episode_id: str | None
 
         all_claims.extend(claims)
 
+    # --- 4.5 CONTRADICTION DETECTION (Day 5) -----------------------------
+    # Runs after all sources are evaluated, before learn/persist. This is
+    # the stage that makes Session 2 visibly different from Session 1:
+    # a superseded claim here produces a lesson + a reliability ding for
+    # the OLD claim's source, which the plan stage (retrieve -> plan) of
+    # a later episode will read and act on.
+    contradictions_found = detect_contradictions(config, project, all_claims)
+    supersedes: dict[str, str] = {}
+    contradiction_writes: list[dict] = []
+
+    for c in contradictions_found:
+        log.info("episode=%s stage=contradiction new_claim=%r existing_claim=%r note=%r",
+                  episode_id, c.new_claim.text, c.existing_claim_text, c.note)
+
+        supersedes[c.new_claim.claim_id] = c.existing_claim_id
+        contradiction_writes.append({
+            "claim_id": c.new_claim.claim_id,
+            "conflicting_claim_id": c.existing_claim_id,
+            "note": c.note,
+        })
+
+        old_source = by_source_id.get(c.existing_source_id) if c.existing_source_id else None
+        if old_source is not None:
+            reliability_updates.append(compute_reliability_update(old_source, was_successful=False))
+            lessons.append(generate_contradiction_lesson(config, old_source, c))
+
     # --- 5. LEARN (synthesis is the last thing before persist) -----------
     final_answer = synthesize_answer(config, query, all_claims)
-    log.info("episode=%s stage=learn lessons_generated=%d", episode_id, len(lessons))
+    log.info("episode=%s stage=learn lessons_generated=%d contradictions_found=%d",
+              episode_id, len(lessons), len(contradictions_found))
 
     result = EpisodeResult(
         episode_id=episode_id,
@@ -112,7 +140,8 @@ def run_episode(config: Config, project: str, query: str, episode_id: str | None
     # rule: an episode is not "completed" until this commits.
     run_in_transaction(
         config, persist_episode, result,
-        source_roles=source_roles, supersedes={}, reliability_updates=reliability_updates,
+        source_roles=source_roles, supersedes=supersedes,
+        reliability_updates=reliability_updates, contradictions=contradiction_writes,
     )
     log.info("episode=%s stage=persist status=committed", episode_id)
 

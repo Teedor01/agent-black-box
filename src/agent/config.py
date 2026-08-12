@@ -108,6 +108,7 @@ class ExtractedClaim:
     confidence: float
     embedding: list[float]
     source_id: str
+    claim_id: str = field(default_factory=new_id)
 
 
 @dataclass
