@@ -1,7 +1,7 @@
 # Core agent loop dependencies (Days 3-4)
 psycopg[binary]>=3.1
 boto3>=1.34
-requests>=2.31
+requests>=2.31   # also used by src/mcp/client.py (MCP HTTP transport)
 trafilatura>=1.8
 python-dotenv>=1.0
 

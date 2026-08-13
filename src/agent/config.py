@@ -24,6 +24,8 @@ class Config:
     aws_region: str
     bedrock_embedding_model_id: str
     bedrock_text_model_id: str
+    mcp_endpoint: str
+    mcp_bearer_token: str
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -34,6 +36,8 @@ class Config:
                 "AWS_REGION",
                 "BEDROCK_EMBEDDING_MODEL_ID",
                 "BEDROCK_TEXT_MODEL_ID",
+                "COCKROACHDB_MCP_ENDPOINT",
+                "COCKROACHDB_MCP_BEARER_TOKEN",
             )
             if not os.environ.get(name)
         ]
@@ -47,6 +51,8 @@ class Config:
             aws_region=os.environ["AWS_REGION"],
             bedrock_embedding_model_id=os.environ["BEDROCK_EMBEDDING_MODEL_ID"],
             bedrock_text_model_id=os.environ["BEDROCK_TEXT_MODEL_ID"],
+            mcp_endpoint=os.environ["COCKROACHDB_MCP_ENDPOINT"],
+            mcp_bearer_token=os.environ["COCKROACHDB_MCP_BEARER_TOKEN"],
         )
 
 

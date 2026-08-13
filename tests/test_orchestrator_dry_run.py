@@ -22,6 +22,8 @@ def fake_config() -> Config:
         aws_region="us-east-1",
         bedrock_embedding_model_id="amazon.titan-embed-text-v2:0",
         bedrock_text_model_id="anthropic.claude-sonnet-5",
+        mcp_endpoint="https://cockroachlabs.cloud/mcp",
+        mcp_bearer_token="fake-token",
     )
 
 
