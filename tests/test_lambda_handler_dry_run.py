@@ -72,9 +72,51 @@ def test_episode_exception_returns_500_not_a_crash():
     print("OK: an exception inside run_episode is caught and returned as a readable 500, not an unhandled crash")
 
 
+def test_options_preflight_returns_204_with_cors_headers():
+    from src.agent import lambda_handler
+
+    event = {"requestContext": {"http": {"method": "OPTIONS"}}}
+    response = lambda_handler.handler(event, context=None)
+
+    assert response["statusCode"] == 204
+    assert response["headers"]["Access-Control-Allow-Origin"] == "*"
+    print("OK: CORS preflight handled without touching config/Bedrock/DB")
+
+
+def test_memory_trace_action_returns_trace_data():
+    from src.agent import lambda_handler
+    import json
+
+    fake_trace = {
+        "project": "crynux",
+        "sources": [{"domain": "docs.crynux.io", "reliability_score": 0.35}],
+        "episodes": [], "lessons": [], "contradictions": [],
+    }
+
+    with patch("src.agent.lambda_handler._load_config", lambda: object()), \
+         patch("src.agent.lambda_handler.get_memory_trace", lambda config, project: fake_trace):
+        response = lambda_handler.handler({"action": "memory_trace", "project": "crynux"}, context=None)
+
+    assert response["statusCode"] == 200
+    body = json.loads(response["body"])
+    assert body["sources"][0]["domain"] == "docs.crynux.io"
+    print("OK: memory_trace action routes correctly and returns trace data")
+
+
+def test_memory_trace_missing_project_returns_400():
+    from src.agent import lambda_handler
+
+    response = lambda_handler.handler({"action": "memory_trace"}, context=None)
+    assert response["statusCode"] == 400
+    print("OK: memory_trace without a project rejected with 400")
+
+
 if __name__ == "__main__":
     test_direct_invoke_payload_returns_200()
     test_api_gateway_proxy_payload_returns_200()
     test_missing_required_field_returns_400()
     test_episode_exception_returns_500_not_a_crash()
+    test_options_preflight_returns_204_with_cors_headers()
+    test_memory_trace_action_returns_trace_data()
+    test_memory_trace_missing_project_returns_400()
     print("\nAll Lambda handler dry-run checks passed.")

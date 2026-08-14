@@ -24,6 +24,7 @@ def fake_config() -> Config:
         bedrock_text_model_id="anthropic.claude-sonnet-5",
         mcp_endpoint="https://cockroachlabs.cloud/mcp",
         mcp_bearer_token="fake-token",
+        mcp_database="defaultdb",
     )
 
 
