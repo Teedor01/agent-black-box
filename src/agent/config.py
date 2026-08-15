@@ -1,10 +1,3 @@
-"""
-Shared configuration and dataclasses for the Agent Black Box loop.
-
-Every stage module (memory, planner, sources, extractor, learner,
-orchestrator) imports from here rather than reading os.environ directly,
-so there's exactly one place that knows about env var names.
-"""
 from __future__ import annotations
 
 import os
@@ -26,6 +19,8 @@ class Config:
     bedrock_text_model_id: str
     mcp_endpoint: str
     mcp_bearer_token: str
+    mcp_database: str
+    mcp_cluster_id: str = ""
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -38,6 +33,7 @@ class Config:
                 "BEDROCK_TEXT_MODEL_ID",
                 "COCKROACHDB_MCP_ENDPOINT",
                 "COCKROACHDB_MCP_BEARER_TOKEN",
+                "COCKROACHDB_MCP_DATABASE",
             )
             if not os.environ.get(name)
         ]
@@ -53,15 +49,13 @@ class Config:
             bedrock_text_model_id=os.environ["BEDROCK_TEXT_MODEL_ID"],
             mcp_endpoint=os.environ["COCKROACHDB_MCP_ENDPOINT"],
             mcp_bearer_token=os.environ["COCKROACHDB_MCP_BEARER_TOKEN"],
+            mcp_database=os.environ["COCKROACHDB_MCP_DATABASE"],
+            mcp_cluster_id=os.environ.get("COCKROACHDB_MCP_CLUSTER_ID", ""),
         )
 
 
 def new_id() -> str:
-    """Client-generated UUID. Generating IDs client-side (rather than
-    relying on gen_random_uuid() server-side) is what makes episode writes
-    idempotent on retry -- see Section on reliability in the architecture
-    doc: a retried write with the same episode_id is a no-op, not a
-    duplicate."""
+    
     return str(uuid.uuid4())
 
 
@@ -84,9 +78,7 @@ class SourceRecord:
 
 @dataclass
 class RetrievedMemory:
-    """What the retrieve stage hands to the planner. Empty on a project's
-    first-ever episode -- the planner must handle that gracefully rather
-    than assuming history exists."""
+   
 
     relevant_claims: list[dict] = field(default_factory=list)
     relevant_lessons: list[dict] = field(default_factory=list)

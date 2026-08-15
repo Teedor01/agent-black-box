@@ -1,23 +1,8 @@
-"""
-Stage 5: learn.
-
-Deterministic source-reliability scoring only -- no trained model, per
-the architecture doc's explicit non-goal ("no custom ML reliability
-model"). The formula is an exponential moving average: simple enough to
-explain in the demo video in one sentence, and simple enough to debug by
-hand if a judge asks "why did this score move."
-
-Lessons in this Day 3-4 scope are generated only for within-episode
-events worth remembering (a planned source failed to fetch, or yielded
-nothing relevant). Cross-session "this contradicts what we knew before"
-lessons are Day 5 scope, built on top of this module, not in it.
-"""
 from __future__ import annotations
 
-import json
 from typing import Optional
 
-from src.agent.bedrock_client import embed_text, generate_text
+from src.agent.bedrock_client import embed_text, generate_text, parse_json_response
 from src.agent.config import Config, Lesson, SourceRecord
 
 # How much weight a single episode's outcome carries against a source's
@@ -50,9 +35,7 @@ def compute_reliability_update(source: SourceRecord, was_successful: bool) -> di
 
 def maybe_generate_lesson(config: Config, source: SourceRecord, outcome_description: str,
                            was_successful: bool) -> Optional[Lesson]:
-    """Only generates a lesson for a notable outcome -- a clean successful
-    fetch-and-extract doesn't need one; that's what the reliability score
-    increment already captures without adding noise to the lessons table."""
+    
     if was_successful:
         return None
 
@@ -62,7 +45,7 @@ def maybe_generate_lesson(config: Config, source: SourceRecord, outcome_descript
         f"Write the lesson as JSON."
     )
     raw = generate_text(config, LESSON_SYSTEM_PROMPT, user_prompt, max_tokens=256)
-    parsed = json.loads(raw)
+    parsed = parse_json_response(raw, context=f"maybe_generate_lesson(source_id={source.source_id})")
     text = parsed["text"]
     embedding = embed_text(config, text)
 
@@ -70,10 +53,7 @@ def maybe_generate_lesson(config: Config, source: SourceRecord, outcome_descript
 
 
 def generate_contradiction_lesson(config: Config, old_source: SourceRecord, contradiction) -> Lesson:
-    """Always generates -- a contradiction is inherently notable, unlike
-    a routine fetch failure. `contradiction` is a
-    src.agent.contradiction.ContradictionResult, not type-hinted directly
-    to avoid a circular import between the two modules."""
+    
     user_prompt = (
         f"Source: {old_source.domain} ({old_source.url})\n"
         f'This source previously supported the claim: "{contradiction.existing_claim_text}"\n'
@@ -82,7 +62,7 @@ def generate_contradiction_lesson(config: Config, old_source: SourceRecord, cont
         f"Write the lesson as JSON."
     )
     raw = generate_text(config, LESSON_SYSTEM_PROMPT, user_prompt, max_tokens=256)
-    parsed = json.loads(raw)
+    parsed = parse_json_response(raw, context=f"generate_contradiction_lesson(source_id={old_source.source_id})")
     text = parsed["text"]
     embedding = embed_text(config, text)
 

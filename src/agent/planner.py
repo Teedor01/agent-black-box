@@ -1,17 +1,6 @@
-"""
-Stage 2: plan.
-
-This is the stage the entire project exists to demonstrate: retrieved
-memory has to causally change what happens next, not just get displayed.
-The prompt below explicitly hands the LLM source reliability history and
-past lessons, and instructs it to factor them into source prioritization
--- not just "here's some context, do what you want."
-"""
 from __future__ import annotations
 
-import json
-
-from src.agent.bedrock_client import generate_text
+from src.agent.bedrock_client import generate_text, parse_json_response
 from src.agent.config import Config, PlannedSource, ResearchPlan, RetrievedMemory, SourceRecord
 
 PLANNER_SYSTEM_PROMPT = """You are the planning stage of a research agent. \
@@ -21,14 +10,14 @@ project. Produce a research plan.
 
 Rules:
 - If a source has a low reliability_score or an associated lesson warning \
-about it, deprioritize it -- do not simply list sources in the order given.
+about it, deprioritize it... do not simply list sources in the order given.
 - If a lesson says a source produced outdated or incomplete information on \
 a specific topic, note that in your rationale for that source and prefer \
 sources with higher reliability or more recent claims for the same topic.
 - Output ONLY valid JSON, no preamble, matching this exact shape:
 {"strategy_summary": "...", "planned_sources": [{"source_id": "...", "priority": 1, "rationale": "..."}]}
 - priority 1 is highest. Every source_id you use MUST come from the \
-provided source list -- do not invent one.
+provided source list, do not invent one.
 """
 
 
@@ -68,15 +57,16 @@ def plan_research(config: Config, project: str, query: str, memory: RetrievedMem
         f"Produce the research plan as JSON."
     )
 
-    raw = generate_text(config, PLANNER_SYSTEM_PROMPT, user_prompt, max_tokens=1024)
-    parsed = json.loads(raw)
+    
+    raw = generate_text(config, PLANNER_SYSTEM_PROMPT, user_prompt, max_tokens=2048)
+    parsed = parse_json_response(raw, context="plan_research")
 
     by_id: dict[str, SourceRecord] = {s.source_id: s for s in memory.source_reliability}
     planned_sources = []
     for entry in parsed["planned_sources"]:
         source = by_id.get(entry["source_id"])
         if source is None:
-            continue  # ignore any hallucinated source_id rather than crash the plan
+            continue  
         planned_sources.append(
             PlannedSource(
                 source_id=source.source_id,

@@ -1,25 +1,14 @@
-"""
-Lightweight contradiction detection (architecture doc Section 5). Runs
-during evaluate, after claims are extracted, before persist. Vector
-search for the closest existing claim, then one LLM judgment call only
-for pairs already close enough to plausibly be about the same fact --
-not a full fact-verification pass over every claim pair.
-"""
 from __future__ import annotations
 
-import json
 from dataclasses import dataclass
 from typing import Optional
 
-from src.agent.bedrock_client import generate_text
+from src.agent.bedrock_client import generate_text, parse_json_response
 from src.agent.config import Config, ExtractedClaim
 from src.db.connection import get_connection
 from src.db.repository import find_closest_claim
 
-# L2 distance cutoff -- only ask the LLM to judge a pair if the new claim
-# is already this close to something we've claimed before. Tune this
-# empirically against your embedding model; it's a recall/precision
-# knob, not a correctness threshold.
+
 CANDIDATE_DISTANCE_THRESHOLD = 0.6
 
 CONTRADICTION_SYSTEM_PROMPT = """You compare two factual claims about the \
@@ -61,7 +50,9 @@ def detect_contradictions(config: Config, project: str, new_claims: list[Extract
                     f"Judge as JSON."
                 )
                 raw = generate_text(config, CONTRADICTION_SYSTEM_PROMPT, user_prompt, max_tokens=256)
-                judged = json.loads(raw)
+                judged = parse_json_response(
+                    raw, context=f"detect_contradictions(claim_id={candidate['claim_id']})"
+                )
 
                 if judged.get("conflict"):
                     results.append(ContradictionResult(

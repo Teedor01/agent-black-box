@@ -1,13 +1,3 @@
-"""
-Stages 3-4: act (fetch, in src/sources/fetch.py) and evaluate (this file).
-
-Given fetched text from one source, extract discrete factual claims with
-a confidence score each. Confidence here is the LLM's own stated
-confidence in how clearly and directly the source text supports the
-claim -- not a judgment about whether the claim is objectively true.
-Truth-tracking across sources/time is what the contradiction mechanism
-(Day 5) is for, not this stage.
-"""
 from __future__ import annotations
 
 import json
@@ -31,8 +21,6 @@ supports the claim, not how important the claim is.
 
 
 def extract_claims(config: Config, query: str, source_id: str, source_text: str) -> list[ExtractedClaim]:
-    # Trim aggressively -- this is claim extraction, not full-document
-    # analysis, and keeping the prompt small keeps latency and cost down.
     trimmed = source_text[:6000]
 
     user_prompt = f"Research query: {query}\n\nSource text:\n{trimmed}\n\nExtract claims as JSON."
