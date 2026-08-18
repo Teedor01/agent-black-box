@@ -10,6 +10,10 @@ from src.agent.config import Config
 logger = logging.getLogger(__name__)
 
 
+class LLMResponseError(RuntimeError):
+    pass
+
+
 def get_bedrock_client(config: Config):
     return boto3.client("bedrock-runtime", region_name=config.aws_region)
 
@@ -32,23 +36,17 @@ def generate_text(config: Config, system_prompt: str, user_prompt: str,
     text = "".join(text_parts)
 
     if not text:
-        logger.error(
-            "generate_text: no text content in Bedrock response. "
-            "stop_reason=%s block_types=%s full_content=%s",
-            stop_reason,
-            [list(b.keys()) for b in content_blocks],
-            content_blocks,
-        )
-        raise ValueError(
-            f"Bedrock Converse response contained no text content "
+        diag = (
+            f"generate_text: no text content in Bedrock response "
             f"(stop_reason={stop_reason}, {len(content_blocks)} block(s), "
-            f"block keys={[list(b.keys()) for b in content_blocks]}). "
-            f"See logged full_content above for the raw response."
+            f"block keys={[list(b.keys()) for b in content_blocks]})."
         )
+        logger.error(diag + " full_content=%s", content_blocks)
+        raise LLMResponseError(diag)
 
     if stop_reason == "max_tokens":
         logger.warning(
-            "generate_text: response was truncated by max_tokens=%d, "
+            "generate_text: response was truncated by max_tokens=%d -- "
             "output may be incomplete JSON.",
             max_tokens,
         )
@@ -66,22 +64,21 @@ def strip_json_fence(raw: str) -> str:
     return stripped
 
 
-def parse_json_response(raw: str, context: str) -> dict:
-    
+def parse_json_response(raw: str, context: str) -> dict
     cleaned = strip_json_fence(raw)
     try:
         obj, _ = json.JSONDecoder().raw_decode(cleaned)
         return obj
-    except json.JSONDecodeError:
-        logger.error(
-            "%s: failed to parse model output as JSON. raw_len=%d raw=%r",
-            context, len(raw), raw,
+    except json.JSONDecodeError as exc:
+        diag = (
+            f"{context}: failed to parse model output as JSON "
+            f"(raw_len={len(raw)}). Raw (truncated): {raw[:300]!r}"
         )
-        raise
+        logger.error(diag)
+        raise LLMResponseError(diag) from exc
 
 
 def embed_text(config: Config, text: str) -> list[float]:
-    
     client = get_bedrock_client(config)
     response = client.invoke_model(
         modelId=config.bedrock_embedding_model_id,
@@ -89,5 +86,24 @@ def embed_text(config: Config, text: str) -> list[float]:
         contentType="application/json",
         accept="application/json",
     )
-    body = json.loads(response["body"].read())
+    raw = response["body"].read()
+
+    try:
+        body = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        diag = (
+            f"embed_text: Titan embedding response was not valid JSON "
+            f"(raw_len={len(raw)}). Raw (truncated): {raw[:300]!r}"
+        )
+        logger.error(diag)
+        raise LLMResponseError(diag) from exc
+
+    if "embedding" not in body:
+        diag = (
+            f"embed_text: Titan response had no 'embedding' key. "
+            f"Keys present: {list(body.keys())}. Body (truncated): {str(body)[:300]!r}"
+        )
+        logger.error(diag)
+        raise LLMResponseError(diag)
+
     return body["embedding"]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
@@ -17,18 +18,28 @@ log = logging.getLogger("agent_black_box.lambda")
 _cached_config: Optional[Config] = None
 
 
-CORS_HEADERS = {
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-}
-
-
 def _get_secret(client, secret_arn: str, json_key: str) -> str:
-   
     response = client.get_secret_value(SecretId=secret_arn)
     raw = response["SecretString"]
-    parsed = json.loads(raw)
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        diag = (
+            f"_get_secret({secret_arn}): SecretString was not valid JSON "
+            f"(raw_len={len(raw)}). Raw (truncated): {raw[:200]!r}"
+        )
+        log.error(diag)
+        raise RuntimeError(diag) from exc
+
+    if json_key not in parsed:
+        diag = (
+            f"_get_secret({secret_arn}): expected key {json_key!r} not found. "
+            f"Keys present: {list(parsed.keys())}"
+        )
+        log.error(diag)
+        raise RuntimeError(diag)
+
     return parsed[json_key]
 
 
@@ -61,28 +72,44 @@ def _load_config() -> Config:
 
 
 def _parse_event(event: dict) -> dict:
-    
-    if isinstance(event.get("body"), str):
-        return json.loads(event["body"])
-    return event
+    body = event.get("body")
+    if not isinstance(body, str):
+        return event
+
+    if event.get("isBase64Encoded"):
+        try:
+            body = base64.b64decode(body).decode("utf-8")
+        except Exception as exc:
+            diag = f"_parse_event: failed to base64-decode event body (len={len(body)})."
+            log.error(diag)
+            raise RuntimeError(diag) from exc
+
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError as exc:
+        diag = (
+            f"_parse_event: event body was not valid JSON "
+            f"(isBase64Encoded={event.get('isBase64Encoded')}, len={len(body)}). "
+            f"Raw (truncated): {body[:200]!r}"
+        )
+        log.error(diag)
+        raise RuntimeError(diag) from exc
 
 
 def _response(status_code: int, body: dict) -> dict:
-   
     return {
         "statusCode": status_code,
-        "headers": {"Content-Type": "application/json", **CORS_HEADERS},
+        "headers": {"Content-Type": "application/json"},
         "body": json.dumps(body),
     }
 
 
 def handler(event, context):
-   
-    method = (event.get("requestContext", {}) or {}).get("http", {}).get("method") or event.get("httpMethod")
-    if method == "OPTIONS":
-        return {"statusCode": 204, "headers": CORS_HEADERS, "body": ""}
+    try:
+        payload = _parse_event(event)
+    except RuntimeError as exc:
+        return _response(400, {"error": str(exc)})
 
-    payload = _parse_event(event)
     action = payload.get("action", "run_episode")
 
     if action == "memory_trace":

@@ -9,12 +9,13 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+build/
 
 # Node
 node_modules/
 .next/
 dist/
-build/
+.env.local
 
 # OS / editor
 .DS_Store
@@ -24,3 +25,4 @@ Thumbs.db
 
 # Logs
 *.log
+mcp_secret.json

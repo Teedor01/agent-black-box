@@ -5,10 +5,6 @@ from typing import Optional
 from src.agent.bedrock_client import embed_text, generate_text, parse_json_response
 from src.agent.config import Config, Lesson, SourceRecord
 
-# How much weight a single episode's outcome carries against a source's
-# established history. Low value: reliability shifts gradually, not on
-# one fetch failure -- matches the source_reliability field being framed
-# as reputation, not a pass/fail gate.
 LEARNING_RATE = 0.15
 
 LESSON_SYSTEM_PROMPT = """You write a single short lesson (1-2 sentences) \

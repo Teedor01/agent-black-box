@@ -1,7 +1,7 @@
 # Demo Source Corpus — Manifest
 
-Curated Day 2 (per the 10-day plan). Every source below is real and was
-retrieved via web search/fetch on 2026-08-10 — nothing here is fabricated,
+Every source below is real and was
+retrieved via web search/fetch on 2026-08-10... nothing here is fabricated,
 per the architecture doc's explicit constraint. Dates noted are the search
 index's observed/crawl dates for that page, not necessarily the page's own
 "last updated" date — treat them as "content observed as of," not an
@@ -23,7 +23,7 @@ scenario needed.
   tasks for applications, and are rewarded in tokens for correct output,
   verified via a blockchain consensus mechanism that prevents cheating.
 - Framing risk: read on its own, this describes node work as
-  Stable-Diffusion-only — which is no longer the full picture (see Source 2).
+  Stable-Diffusion-only, which is no longer the full picture (see Source 2).
 
 **Source 2 (the correction) — current framing**
 - URL: https://docs.crynux.io/
@@ -34,7 +34,7 @@ scenario needed.
   compute network supporting LLM/VLM inference and fine-tuning tasks, not
   image generation alone, coordinated through a named consensus protocol
   (vssML) for detecting and penalizing malicious node behavior.
-- Also relevant: the docs list three successive named network releases —
+- Also relevant: the docs list three successive named network releases...
   Lithium, Helium, and Hydrogen — confirming the protocol has gone through
   multiple real architectural generations, which supports the "node scope
   expanded over time" narrative rather than treating it as a one-off error.
@@ -43,7 +43,7 @@ scenario needed.
 - Session 1: agent researches "Crynux node architecture," draws primarily
   on Source 1, records a claim scoped to image generation only.
 - Between sessions: Source 2 is introduced (or the agent encounters it on
-  a later, broader crawl) — claim conflict flagged per the architecture's
+  a later, broader crawl)... claim conflict flagged per the architecture's
   contradiction mechanism (Section 5): new claim doesn't just disagree, it
   supersedes the earlier one's scope.
 - Session 2: agent researches "Crynux's current node architecture" (same
@@ -53,9 +53,9 @@ scenario needed.
 
 ## Crynux — supporting sources (not part of the drift pair, general corpus depth)
 
-- https://github.com/crynux-network/crynux-node — official node source
+- https://github.com/crynux-network/crynux-node: official node source
   repository (domain: github.com, type: official_docs)
-- https://docs.crynux.io/system-design/consensus-protocol — consensus
+- https://docs.crynux.io/system-design/consensus-protocol: consensus
   protocol detail page (domain: docs.crynux.io, type: official_docs)
 
 ## Neptune — general corpus (no drift narrative assigned yet — see flag below)
@@ -73,7 +73,7 @@ scenario needed.
   talk.neptune.cash, type: community.
 
 **Resolved:** Neptune Cash (NPT) and Neptune Privacy (XNT) are two distinct,
-separately-tracked projects — Neptune Privacy is a community fork of
+separately-tracked projects; Neptune Privacy is a community fork of
 Neptune Cash, not a rebrand. Confirmed by SafeTrade's official facilitated
 swap announcement (Nov 2025), which describes Neptune Privacy as "a
 community-built fork" of Neptune Cash and explicitly notes both projects
@@ -96,6 +96,4 @@ would itself be a source-conflation bug, not a research finding.
 
 ## Not yet included
 
-Tokenomics-specific and community/social sources for either project — out
-of scope for Day 2, which is about having enough real material for the
-core loop (Days 3–4) to research against, not full corpus completeness.
+Tokenomics-specific and community/social sources for either project... 

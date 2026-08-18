@@ -1,39 +1,3 @@
-"""
-Minimal MCP (Model Context Protocol) HTTP client for the CockroachDB
-Cloud Managed MCP Server. General JSON-RPC 2.0 / MCP client, not
-CockroachDB-specific beyond the execute_sql() convenience wrapper.
-
-CORRECTION to an earlier claim in this project: this file previously
-stated the MCP server is "read-only by default." Having now read
-CockroachDB's actual MCP docs directly, that's not quite right. Read
-tools (select_query, list_tables, etc.) and write tools (insert_rows,
-create_table, create_database) are separate tool sets, but for an API-key
-/ service-account connection (what a Lambda must use -- OAuth requires an
-interactive browser login), the docs describe access as determined by the
-service account's assigned CockroachDB role (Cluster Admin or Cluster
-Operator), not by an explicit read-only toggle the way the OAuth flow's
-"grant read and/or write permissions" prompt implies. In practice: this
-client only ever CALLS read tools (see SQL_TOOL_NAME_HINTS below), so it
-cannot itself issue a write -- but whether the service account's
-credential is *capable* of write tools if asked is not confirmed from
-here. If the two-credential security boundary this project relies on
-matters to you, check whether the write tools (insert_rows etc.) are
-actually reachable with your service account's API key before trusting
-that boundary as a hard guarantee, not just "this client happens not to
-call them."
-
-MCP protocol note (this is the actual fix for the JSONDecodeError you
-hit): the MCP Streamable HTTP transport requires an `initialize`
-handshake as the first call, which returns a session ID (via the
-`Mcp-Session-Id` response header) that must be sent on every subsequent
-request, and requires an `Accept: application/json, text/event-stream`
-request header. This file's first version skipped all of that and sent
-bare `tools/list`/`tools/call` requests with no session -- which is the
-most likely reason the server returned something that wasn't parseable
-JSON (an HTML error page, or an empty body) rather than a proper
-JSON-RPC error response. Fixed below: _ensure_initialized() runs once,
-lazily, before any other call.
-"""
 from __future__ import annotations
 
 import json
@@ -44,9 +8,6 @@ import requests
 
 log = logging.getLogger("agent_black_box.mcp")
 
-# select_query is CockroachDB's real, confirmed tool name for running a
-# SELECT. The rest are kept as fallbacks in case your server version
-# differs -- matched by substring, case-insensitive, in priority order.
 SQL_TOOL_NAME_HINTS = ["select_query", "run_sql", "execute_sql", "sql_query", "query", "sql"]
 
 MCP_PROTOCOL_VERSION = "2025-03-26"
@@ -67,10 +28,6 @@ class MCPClient:
         self._session.headers.update({
             "Authorization": f"Bearer {bearer_token}",
             "Content-Type": "application/json",
-            # Required by the MCP Streamable HTTP spec -- the server may
-            # respond with either a plain JSON body or a Server-Sent
-            # Events stream, and it needs this header present to decide
-            # it's allowed to do either.
             "Accept": "application/json, text/event-stream",
         })
         self._request_id = 0
@@ -83,11 +40,7 @@ class MCPClient:
         return response
 
     def _parse_response_body(self, response: requests.Response) -> dict:
-        """Handles both response shapes the spec allows. Raises a
-        diagnostic-rich MCPError (status, content-type, raw body snippet)
-        instead of letting a bare JSONDecodeError propagate -- the whole
-        point is that the next failure, if there is one, tells you
-        immediately what the server actually sent back."""
+      
         content_type = response.headers.get("Content-Type", "")
 
         if "text/event-stream" in content_type:
@@ -147,9 +100,7 @@ class MCPClient:
         else:
             log.info("mcp: initialized with no Mcp-Session-Id header returned (server may not require one)")
 
-        # Per spec, the client should send this notification after a
-        # successful initialize. It's a notification (no "id"), so no
-        # response body is expected back.
+      
         self._session.post(
             self.endpoint,
             json={"jsonrpc": "2.0", "method": "notifications/initialized"},
@@ -193,15 +144,7 @@ class MCPClient:
         )
 
     def execute_sql(self, sql_template: str, params: Optional[list] = None) -> list[dict]:
-        """Runs a read-only SELECT through the MCP server, returns rows
-        as a list of dicts. sql_template uses $1, $2, ... placeholders --
-        select_query has no separate-parameters mechanism (confirmed from
-        the real inputSchema), so this substitutes each placeholder with
-        a safely escaped SQL literal BEFORE sending. Confirmed real
-        argument shape: {"query": "...", "database": "...", "cluster_id": "..."}
-        -- "query" (not "sql"), "database" is required, "cluster_id" is
-        required unless the MCP config already has one associated with
-        this credential."""
+      
         tool_name = self._resolve_sql_tool_name()
         rendered_sql = _substitute_placeholders(sql_template, params or [])
         arguments = {"query": rendered_sql, "database": self.database}
@@ -230,13 +173,7 @@ def _substitute_placeholders(sql_template: str, params: list) -> str:
 
 
 def _parse_sql_result(raw_result: Any) -> list[dict]:
-    """MCP tool results are typically {"content": [{"type": "text", "text": "..."}], ...}.
-    UNCONFIRMED against the real server: whether that text is a JSON
-    array of row objects, a JSON object with a 'rows' key, or something
-    else. Tries the likely JSON shapes and raises clearly rather than
-    silently returning garbage if the format doesn't match -- run
-    verify_mcp_connection.py to see the real shape and fix this function
-    if it differs."""
+   
     content = raw_result.get("content") if isinstance(raw_result, dict) else None
     if not content:
         raise MCPError(f"Unexpected MCP tool result shape (no 'content'): {raw_result!r}")

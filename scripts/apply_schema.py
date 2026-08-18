@@ -1,16 +1,3 @@
-"""
-Applies src/db/schema.sql to CockroachDB directly via psycopg -- no
-cockroach CLI binary required. Useful on Windows where getting the CLI
-onto PATH is its own fight not worth having.
-
-Usage (cmd.exe):
-    set COCKROACHDB_CONNECTION_STRING=postgresql://...
-    python scripts\\apply_schema.py
-
-Or, since you already have a .env file for the agent loop, this reads
-from COCKROACHDB_CONNECTION_STRING via python-dotenv automatically if a
-.env file is present in the working directory -- no need to set it twice.
-"""
 from __future__ import annotations
 
 import sys
@@ -43,7 +30,7 @@ def main():
     with psycopg.connect(conn_string) as conn:
         with conn.cursor() as cur:
             cur.execute("SHOW TABLES;")
-            tables = [row[1] for row in cur.fetchall()]  # (schema, table_name, ...)
+            tables = [row[1] for row in cur.fetchall()]  
     expected = {"sources", "episodes", "episode_sources", "claims", "lessons", "contradictions"}
     found = set(tables)
     print(f"Found tables: {sorted(found)}")

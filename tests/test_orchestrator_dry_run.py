@@ -1,12 +1,3 @@
-"""
-Dry-run test: proves retrieve -> plan -> act -> evaluate -> learn ->
-persist executes in order and wires data correctly between stages,
-without touching real AWS or CockroachDB. Every Bedrock/DB/network call
-is mocked at the module boundary -- this validates the orchestrator's
-logic, not the external services.
-
-Run: python -m pytest tests/test_orchestrator_dry_run.py -v
-"""
 from __future__ import annotations
 
 import json
@@ -56,7 +47,7 @@ def test_full_loop_runs_in_order_and_persists():
         ]
     })
 
-    # generate_text is called 3 times in sequence: planner, extractor, synthesizer
+    
     generate_text_responses = iter([plan_json, claims_json, "Crynux nodes now support LLM/VLM inference, not just image generation."])
 
     call_log = []
@@ -94,7 +85,6 @@ def test_full_loop_runs_in_order_and_persists():
         config = fake_config()
         result = orchestrator.run_episode(config, project="crynux", query="What is Crynux's current node architecture?")
 
-    # --- assertions about what happened, in order ---
     assert len(call_log) == 3, "planner, extractor, and synthesizer should each call generate_text exactly once"
 
     assert result.status == "completed"
@@ -172,11 +162,6 @@ def test_fetch_failure_does_not_crash_episode_and_scores_source_down():
 
 
 def test_contradiction_supersedes_old_claim_and_dings_old_source():
-    """The money shot, tested at the unit level: a new claim that
-    contradicts a prior one produces a lesson about the OLD source,
-    dings that source's reliability, and records the supersession --
-    all in the same episode's persist call. This is what makes a LATER
-    episode's plan() stage deprioritize the old source."""
     from src.agent.contradiction import ContradictionResult
     from src.agent.config import ExtractedClaim
     from src.agent import orchestrator

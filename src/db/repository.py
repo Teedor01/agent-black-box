@@ -1,9 +1,3 @@
-"""
-Repository functions -- one function per read/write the agent loop needs.
-No ORM: the schema is six tables and the queries are simple enough that an
-ORM would add indirection without buying anything, matching the
-architecture doc's "avoid unnecessary complexity" rule.
-"""
 from __future__ import annotations
 
 from typing import Optional
@@ -60,9 +54,6 @@ def find_closest_claim(cur, project: str, embedding: list[float]) -> Optional[di
 
 
 def retrieve_similar_claims(cur, project: str, query_embedding: list[float], limit: int = 5) -> list[dict]:
-    """The structural-filter-then-vector-rank query from architecture doc
-    Section F, using the (project, embedding) prefix-partitioned vector
-    index -- only searches this project's partition, not the whole table."""
     cur.execute(
         """
         SELECT claim_id, text, confidence, source_id, superseded_by
@@ -98,11 +89,6 @@ def retrieve_similar_lessons(cur, project: str, query_embedding: list[float], li
     ]
 
 
-# ---------------------------------------------------------------------------
-# Writes -- used by the persist stage. All of these are called from a
-# single run_in_transaction() invocation in the orchestrator -- one
-# episode's writes commit together or not at all.
-# ---------------------------------------------------------------------------
 
 def insert_episode(cur, episode_id: str, project: str, query: str, strategy: str) -> None:
     cur.execute(

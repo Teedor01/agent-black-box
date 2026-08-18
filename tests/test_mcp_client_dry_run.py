@@ -1,10 +1,3 @@
-"""
-Dry-run test for src/mcp/client.py -- proves the initialize handshake,
-tool-name discovery, result parsing, and placeholder substitution logic
-against mocked HTTP responses. Does NOT prove the real server matches
-these shapes -- that's what scripts/verify_mcp_connection.py is for, run
-against a real bearer token, not something a mock can stand in for.
-"""
 from __future__ import annotations
 
 import json
@@ -24,9 +17,6 @@ def _mock_response(json_body: dict, headers: dict = None):
 
 
 def _initialized_client() -> MCPClient:
-    """Most tests care about behavior AFTER the handshake, not the
-    handshake itself -- skip it directly rather than mocking two extra
-    POSTs in every single test."""
     client = MCPClient("https://fake.example/mcp", "fake-token", "defaultdb")
     client._initialized = True
     return client
@@ -60,9 +50,6 @@ def test_ensure_initialized_only_runs_once():
 
 
 def test_non_json_response_raises_diagnostic_error_not_bare_crash():
-    """This is the actual bug that was hit: a non-JSON response used to
-    crash with an opaque JSONDecodeError. Now it should raise a clear
-    MCPError with the status/content-type/body snippet."""
     client = _initialized_client()
 
     html_response = MagicMock()
@@ -195,10 +182,7 @@ def test_placeholder_substitution_escapes_embedded_quotes():
 
 
 def test_execute_sql_sends_confirmed_real_argument_shape():
-    """Locks in the argument shape confirmed against the real server:
-    {"query": ..., "database": ..., "cluster_id": ...} -- not "sql", and
-    database/cluster_id are real required arguments, not optional
-    extras."""
+
     client = MCPClient("https://fake.example/mcp", "fake-token", "defaultdb", cluster_id="abc-123")
     client._initialized = True
     client._sql_tool_name = "select_query"

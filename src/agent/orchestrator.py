@@ -1,16 +1,3 @@
-"""
-The orchestrator: retrieve -> plan -> act -> evaluate -> learn -> persist.
-
-This is a plain script, not a framework-managed agent -- per the
-architecture doc's explicit rejection of Bedrock Agents, the loop's steps
-are visible right here, in order, in one function you can read top to
-bottom. This same function is what Day 6 wraps in a Lambda handler; the
-handler will just call run_episode() with the query/project from the
-event payload.
-
-Run directly for local testing:
-    python -m src.agent.orchestrator --project crynux --query "What is Crynux's current node architecture?"
-"""
 from __future__ import annotations
 
 import argparse
@@ -35,7 +22,7 @@ def run_episode(config: Config, project: str, query: str, episode_id: str | None
     episode_id = episode_id or new_id()
     log.info("episode=%s stage=retrieve project=%s query=%r", episode_id, project, query)
 
-    # --- 1. RETRIEVE ---------------------------------------------------
+    
     memory = retrieve_memory(config, project, query)
     log.info(
         "episode=%s stage=retrieve claims=%d lessons=%d sources=%d",
@@ -43,7 +30,7 @@ def run_episode(config: Config, project: str, query: str, episode_id: str | None
         len(memory.source_reliability),
     )
 
-    # --- 2. PLAN ---------------------------------------------------------
+    
     plan = plan_research(config, project, query, memory)
     log.info("episode=%s stage=plan strategy=%r planned_sources=%d",
               episode_id, plan.strategy_summary, len(plan.planned_sources))
@@ -58,7 +45,7 @@ def run_episode(config: Config, project: str, query: str, episode_id: str | None
     for planned in plan.planned_sources:
         source = by_source_id[planned.source_id]
 
-        # --- 3. ACT (fetch) ---------------------------------------------
+        
         fetch_result = fetch_source(planned.url)
         log.info("episode=%s stage=act source=%s success=%s",
                   episode_id, planned.domain, fetch_result.success)
@@ -73,7 +60,7 @@ def run_episode(config: Config, project: str, query: str, episode_id: str | None
                 lessons.append(lesson)
             continue
 
-        # --- 4. EVALUATE (extract claims) --------------------------------
+        
         claims = extract_claims(config, query, source.source_id, fetch_result.text)
         log.info("episode=%s stage=evaluate source=%s claims_extracted=%d",
                   episode_id, planned.domain, len(claims))
@@ -92,12 +79,7 @@ def run_episode(config: Config, project: str, query: str, episode_id: str | None
 
         all_claims.extend(claims)
 
-    # --- 4.5 CONTRADICTION DETECTION (Day 5) -----------------------------
-    # Runs after all sources are evaluated, before learn/persist. This is
-    # the stage that makes Session 2 visibly different from Session 1:
-    # a superseded claim here produces a lesson + a reliability ding for
-    # the OLD claim's source, which the plan stage (retrieve -> plan) of
-    # a later episode will read and act on.
+    
     contradictions_found = detect_contradictions(config, project, all_claims)
     supersedes: dict[str, str] = {}
     contradiction_writes: list[dict] = []
@@ -118,7 +100,7 @@ def run_episode(config: Config, project: str, query: str, episode_id: str | None
             reliability_updates.append(compute_reliability_update(old_source, was_successful=False))
             lessons.append(generate_contradiction_lesson(config, old_source, c))
 
-    # --- 5. LEARN (synthesis is the last thing before persist) -----------
+    
     final_answer = synthesize_answer(config, query, all_claims)
     log.info("episode=%s stage=learn lessons_generated=%d contradictions_found=%d",
               episode_id, len(lessons), len(contradictions_found))
@@ -133,11 +115,7 @@ def run_episode(config: Config, project: str, query: str, episode_id: str | None
         final_answer=final_answer,
     )
 
-    # --- 6. PERSIST --------------------------------------------------------
-    # Everything above this line is recoverable if it fails -- nothing is
-    # written yet. This is the one call where failure means the episode
-    # did not happen, per the architecture doc's synchronous-persistence
-    # rule: an episode is not "completed" until this commits.
+    
     run_in_transaction(
         config, persist_episode, result,
         source_roles=source_roles, supersedes=supersedes,

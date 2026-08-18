@@ -7,3 +7,4 @@ python-dotenv>=1.0
 
 # Dev/test only
 pytest>=8.0
+certifi
