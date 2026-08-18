@@ -43,7 +43,7 @@ mapping: see [`architecture/agent-black-box-architecture.md`](architecture/agent
 
 ## Running the agent loop
 
-Requires real credentials — see [`infra/SETUP.md`](infra/SETUP.md) for
+Requires real credentials; see [`infra/SETUP.md`](infra/SETUP.md) for
 provisioning. Copy `.env.example` to `.env` and fill in real values first.
 
 ```
@@ -71,11 +71,3 @@ python -m pytest tests/ -v
 
 MIT — see [`LICENSE`](LICENSE).
 
-## Prior work disclosure
-
-The drift-detection *pattern* (trusted baseline → current state → drift →
-incident) used conceptually for source-reliability tracking here was
-inspired by an earlier, separate project of the author's ("Silent ML Drift
-Sentinel," built for a different hackathon). No code from that project is
-reused — this is a new implementation, built during this hackathon's
-submission period.
