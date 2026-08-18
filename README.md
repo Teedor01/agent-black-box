@@ -40,33 +40,6 @@ mapping: see [`architecture/agent-black-box-architecture.md`](architecture/agent
 - **Amazon Bedrock** — LLM calls for planning, claim extraction, lesson
   generation, and embeddings.
 
-## Status
-
-Days 1-7 of the 10-day plan are done:
-- Infrastructure setup plan and schema (Day 1)
-- Real demo source corpus, Crynux drift pair and Neptune fork relationship
-  both verified (Day 2)
-- Core agent loop as a script — retrieve → plan → act → evaluate → learn →
-  persist (Days 3-4)
-- Contradiction detection — a superseded claim dings the old source and
-  generates a lesson a later episode's plan() reads and acts on (Day 5)
-- Lambda handler wrapping the loop, Windows-safe packaging script,
-  deployment instructions (Day 6)
-- MCP retrieve-path gap closed — the agent's own reads go through the
-  Managed MCP Server's read-only credential, not psycopg
-- Web UI (Day 7): Next.js app with an Ask view (submit a query, see the
-  strategy/answer/claims/lessons) and a Memory Trace view (source
-  reliability, recent episodes, lessons, and contradictions — the view
-  that actually shows the "agent remembers and corrects itself" claim)
-
-All 14 dry-run tests passing. The Next.js build was run and verified in
-this environment — both pages compile cleanly.
-
-**One thing left before trusting the retrieve path in the real demo**:
-the MCP client's exact tool name and result-parsing assumptions are
-unconfirmed against your live server — run
-`python scripts\verify_mcp_connection.py` once with your real bearer
-token (see `infra/DEPLOY.md`).
 
 ## Running the agent loop
 
