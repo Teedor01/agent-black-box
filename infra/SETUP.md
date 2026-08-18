@@ -47,10 +47,7 @@ cockroach sql --url "<your-connection-string>" --execute "SHOW TABLES;"
 You should see all six tables: `sources`, `episodes`, `episode_sources`,
 `claims`, `lessons`, `contradictions`.
 
-**Do this before picking the embedding dimension casually.** `claims.embedding`
-and `lessons.embedding` are declared `VECTOR(1024)` in `schema.sql` — confirm
-that number matches the actual Bedrock embedding model you select in Step 3
-before applying the schema. Changing it after rows exist means a migration.
+
 
 ---
 
@@ -58,15 +55,12 @@ before applying the schema. Changing it after rows exist means a migration.
 
 1. In the AWS Console, go to **Bedrock → Model access** in region
    **us-east-1** and request access to:
-   - An embeddings model (e.g. Titan Text Embeddings V2 — confirm current
-     output dimensions, configurable to 256/512/1024; match this to the
-     schema's `VECTOR(1024)` or change the schema to match).
+   - An embeddings model 
    - **Claude Sonnet 5** for planning / claim extraction / lesson
      generation. 
 2. Access approval can take a few minutes to a few hours on some accounts
 3. Note the exact embedding model ID (e.g. `amazon.titan-embed-text-v2:0`)
-   — you'll need it verbatim in Lambda environment variables once agent
-   code starts 
+   
 
 ---
 
@@ -74,8 +68,8 @@ before applying the schema. Changing it after rows exist means a migration.
 
 Store, as separate secrets:
 
-- CockroachDB connection string (app backend, read/write role from Step 1.3)
-- CockroachDB MCP bearer token (read-only, from Step 5 below)
+- CockroachDB connection string 
+- CockroachDB MCP bearer token 
 
 
 ---
@@ -95,9 +89,7 @@ walks you through (the `claude mcp add cockroachdb-cloud ... --transport
 http` command). Optionally add `--header "mcp-cluster-id: <your-cluster-id>"`
 to scope it to just this cluster (find the ID in the cluster's Overview
 page URL) rather than every cluster in your org. Run `claude /mcp` after
-adding it and authorize through the browser flow. This connection is for
-you to poke at the schema interactively — it is **not** what the Lambda
-uses.
+adding it and authorize through the browser flow. 
 
 ### 5b. Runtime (the Lambda's credential) — Service Account + API key
 
@@ -124,7 +116,7 @@ python scripts\verify_mcp_connection.py
 
 This now prints every tool's full `inputSchema`, which is what settles
 the one remaining unconfirmed detail: `src/mcp/client.py` assumes the
-`select_query` tool's argument key is `"sql"` — check the printed schema
+`select_query` tool's argument key is `"sql"` , check the printed schema
 and fix `execute_sql()` in that file if it's actually called something
 else (`"query"`, `"statement"`, etc.).
 
@@ -134,8 +126,7 @@ else (`"query"`, `"statement"`, etc.).
 
 
 1. Create an IAM role for the future Lambda function with:
-   - `bedrock:InvokeModel` scoped to the specific model IDs from Step 3
-     (not `bedrock:*`)
-   - `secretsmanager:GetSecretValue` scoped to the two secrets from Step 4
+   - `bedrock:InvokeModel` scoped to the specific model IDs 
+   - `secretsmanager:GetSecretValue` scoped to the two secrets 
    - Standard Lambda execution permissions (CloudWatch Logs write)
 ---

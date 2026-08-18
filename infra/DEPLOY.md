@@ -1,4 +1,3 @@
-# Day 6 — Lambda Deployment
 
 Assumes Day 1's IAM role and Secrets Manager entries already exist (see
 `infra/SETUP.md`). This is deployment only — the handler code itself is
@@ -105,7 +104,7 @@ shape were built to spec from CockroachDB's documented conventions, not
 confirmed against a live call, since this environment has no access to
 your endpoint/token.
 
-## Day 7 — Web UI
+
 
 ### Expose the Lambda to the browser: Function URL
 
@@ -147,11 +146,4 @@ Open `http://localhost:3000`. The Ask view calls `run_episode`; the
 Memory Trace view calls `memory_trace` — both hit the same Function URL,
 same Lambda, same `run_episode()` loop from Days 3-6.
 
-### Deploying the frontend publicly (optional, for a shareable demo link)
 
-Not required for the hackathon's local demo video, but if you want a
-public URL to include in the Devpost submission: push `web/` to a repo
-Vercel can see, import it there (framework auto-detected as Next.js), and
-set `NEXT_PUBLIC_API_URL` in Vercel's project environment variables to
-the same Function URL. No AWS-side change needed either way — the
-backend doesn't know or care where the frontend is hosted.
